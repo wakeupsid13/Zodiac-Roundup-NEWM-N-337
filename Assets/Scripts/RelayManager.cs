@@ -50,69 +50,128 @@ public class RelayManager : MonoBehaviour
         return chosen;
     }
 
+    // 1) Helper: always cleanly reset before starting host/client
+    void ResetNetworking()
+    {
+        if (NetworkManager.Singleton != null)
+        {
+            if (NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsClient)
+            {
+                NetworkManager.Singleton.Shutdown();
+            }
+
+            // UTP sometimes holds on to state across runs; clear its config too
+            var utp = (UnityTransport)NetworkManager.Singleton.NetworkConfig.NetworkTransport;
+            utp.SetConnectionData("", 0); // harmless no-op reset
+        }
+    }
+
+    // 2) Subscribe once (e.g., in Awake) to catch transport failures
+    void OnEnable()
+    {
+        var utp = (UnityTransport)NetworkManager.Singleton.NetworkConfig.NetworkTransport;
+        utp.OnTransportEvent += HandleTransportEvent;
+
+        NetworkManager.Singleton.OnClientConnectedCallback += id => Debug.Log($"[Netcode] Client connected: {id}");
+        NetworkManager.Singleton.OnClientDisconnectCallback += id => Debug.Log($"[Netcode] Client disconnected: {id}");
+        NetworkManager.Singleton.OnServerStarted += () => Debug.Log("[Netcode] Server/Host started");
+    }
+
+    void OnDisable()
+    {
+        if (NetworkManager.Singleton == null) return;
+        var utp = (UnityTransport)NetworkManager.Singleton.NetworkConfig.NetworkTransport;
+        utp.OnTransportEvent -= HandleTransportEvent;
+
+        NetworkManager.Singleton.OnClientConnectedCallback -= null;
+        NetworkManager.Singleton.OnClientDisconnectCallback -= null;
+        NetworkManager.Singleton.OnServerStarted -= null;
+    }
+
+    void HandleTransportEvent(NetworkEvent evt, ulong _, System.ArraySegment<byte> __, float ___)
+    {
+        if (evt == NetworkEvent.TransportFailure)
+        {
+            Debug.LogWarning("[Transport] Failure detected. Tearing down.");
+            NetworkManager.Singleton.Shutdown();
+            // UI tip: disable Join/Host buttons until a brand-new allocation is created
+        }
+    }
+
+
     public async Task<string> CreateRelayAndStartServerAsync(int maxConnections = 32)
     {
-        await InitializeServicesAsync();
+        try
+        {
+            ResetNetworking();
+            await InitializeServicesAsync();
 
-        var alloc = await RelayService.Instance.CreateAllocationAsync(maxConnections);
-        var joinCode = await RelayService.Instance.GetJoinCodeAsync(alloc.AllocationId);
-        Debug.Log($"[Relay] Join Code: {joinCode}");
+            var alloc = await RelayService.Instance.CreateAllocationAsync(maxConnections);
+            var joinCode = await RelayService.Instance.GetJoinCodeAsync(alloc.AllocationId);
+            Debug.Log($"[Relay] Join Code: {joinCode}");
 
-        var utp = (UnityTransport)NetworkManager.Singleton.NetworkConfig.NetworkTransport;
+            var utp = (UnityTransport)NetworkManager.Singleton.NetworkConfig.NetworkTransport;
 
-        // Prefer DTLS; fallback to UDP. Some SDKs expose alloc.ServerEndpoints as List<RelayServerEndpoint>
-        var endpoint = PickEndpoint(alloc.ServerEndpoints, "dtls");
-        bool isSecure = endpoint != null && endpoint.ConnectionType == "dtls";
-        string host = endpoint != null ? endpoint.Host : alloc.RelayServer.IpV4;   // fallback for older SDKs
-        ushort port = (ushort)(endpoint != null ? endpoint.Port : alloc.RelayServer.Port);
+            var endpoint = PickEndpoint(alloc.ServerEndpoints, "dtls");
+            bool isSecure = endpoint != null && endpoint.ConnectionType == "dtls";
+            string host = endpoint != null ? endpoint.Host : alloc.RelayServer.IpV4;
+            ushort port = (ushort)(endpoint != null ? endpoint.Port : alloc.RelayServer.Port);
 
-        Debug.Log($"[Relay] Server endpoint: {host}:{port} (type={(isSecure ? "dtls" : "udp")})");
+            var relayData = new RelayServerData(
+                host: host,
+                port: port,
+                allocationId: alloc.AllocationIdBytes,
+                connectionData: alloc.ConnectionData,
+                hostConnectionData: alloc.ConnectionData,
+                key: alloc.Key,
+                isSecure: isSecure
+            );
 
-        var relayData = new RelayServerData(
-            host: host,
-            port: port,
-            allocationId: alloc.AllocationIdBytes,
-            connectionData: alloc.ConnectionData,
-            hostConnectionData: alloc.ConnectionData,
-            key: alloc.Key,
-            isSecure: isSecure
-        );
+            utp.SetRelayServerData(relayData);
 
-        utp.SetRelayServerData(relayData);
-
-        // NOTE: Some UTP versions have different OnTransportEvent signatures.
-        // If you want a handler, add it only if your version matches.
-        // For now we skip wiring this to avoid signature mismatches.
-
-        NetworkManager.Singleton.StartServer();
-        return joinCode;
+            // IMPORTANT: prefer StartHost() (server + local client)
+            NetworkManager.Singleton.StartHost();
+            return joinCode;
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[Relay][Host] {e}");
+            throw;
+        }
     }
 
     public async Task JoinRelayAndStartClientAsync(string joinCode)
     {
-        await InitializeServicesAsync();
+        try
+        {
+            ResetNetworking();
+            await InitializeServicesAsync();
 
-        var joinAlloc = await RelayService.Instance.JoinAllocationAsync(joinCode);
-        var utp = (UnityTransport)NetworkManager.Singleton.NetworkConfig.NetworkTransport;
+            var joinAlloc = await RelayService.Instance.JoinAllocationAsync(joinCode);
+            var utp = (UnityTransport)NetworkManager.Singleton.NetworkConfig.NetworkTransport;
 
-        var endpoint = PickEndpoint(joinAlloc.ServerEndpoints, "dtls");
-        bool isSecure = endpoint != null && endpoint.ConnectionType == "dtls";
-        string host = endpoint != null ? endpoint.Host : joinAlloc.RelayServer.IpV4;
-        ushort port = (ushort)(endpoint != null ? endpoint.Port : joinAlloc.RelayServer.Port);
+            var endpoint = PickEndpoint(joinAlloc.ServerEndpoints, "dtls");
+            bool isSecure = endpoint != null && endpoint.ConnectionType == "dtls";
+            string host = endpoint != null ? endpoint.Host : joinAlloc.RelayServer.IpV4;
+            ushort port = (ushort)(endpoint != null ? endpoint.Port : joinAlloc.RelayServer.Port);
 
-        Debug.Log($"[Relay] Client endpoint: {host}:{port} (type={(isSecure ? "dtls" : "udp")})");
+            var relayData = new RelayServerData(
+                host: host,
+                port: port,
+                allocationId: joinAlloc.AllocationIdBytes,
+                connectionData: joinAlloc.ConnectionData,
+                hostConnectionData: joinAlloc.HostConnectionData,
+                key: joinAlloc.Key,
+                isSecure: isSecure
+            );
 
-        var relayData = new RelayServerData(
-            host: host,
-            port: port,
-            allocationId: joinAlloc.AllocationIdBytes,
-            connectionData: joinAlloc.ConnectionData,
-            hostConnectionData: joinAlloc.HostConnectionData,
-            key: joinAlloc.Key,
-            isSecure: isSecure
-        );
-
-        utp.SetRelayServerData(relayData);
-        NetworkManager.Singleton.StartClient();
+            utp.SetRelayServerData(relayData);
+            NetworkManager.Singleton.StartClient();
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[Relay][Client] {e}");
+            throw;
+        }
     }
 }

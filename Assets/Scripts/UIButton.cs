@@ -12,6 +12,7 @@ public class UIButton : MonoBehaviour
     public UnityEngine.UI.Button joinRelayButton;
 
     bool _joining;
+    [SerializeField] private TMP_InputField nameInput;
 
     public void StartHost()
     {
@@ -43,6 +44,7 @@ public class UIButton : MonoBehaviour
 
             await RelayManager.Instance.JoinRelayAndStartClientAsync(code);
             Debug.Log("[ConnectionUI] Join via Relay requested...");
+            panel.SetActive(false);
         }
         catch (System.Exception ex)
         {
@@ -53,6 +55,12 @@ public class UIButton : MonoBehaviour
             _joining = false;
             if (joinRelayButton) joinRelayButton.interactable = true;
         }
+    }
+
+    public void ChangeName()
+    {
+        if (GameState.Instance != null)
+            GameState.Instance.ChangeName(nameInput.text);
     }
 
 }
