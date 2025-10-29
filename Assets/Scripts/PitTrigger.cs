@@ -39,8 +39,10 @@ public class PitTrigger : NetworkBehaviour
                     var ps = playerObj.GetComponent<PlayerState>();
                     string n = ps ? ps.DisplayName.Value.ToString() : $"Player{clientId}";
                     names.Add(n);
-                }   
+                }
             }
+
+            Debug.Log($"[Contrib] awarding assists to: {string.Join(",", contributors)} (count={contributors.Count})");
 
             // 4) Send toast to all clients
             string animalName = animal.gameObject.name.Replace("(Clone)", "").Trim();

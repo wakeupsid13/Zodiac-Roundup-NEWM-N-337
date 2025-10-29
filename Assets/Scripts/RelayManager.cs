@@ -130,7 +130,13 @@ public class RelayManager : MonoBehaviour
             utp.SetRelayServerData(relayData);
 
             // IMPORTANT: prefer StartHost() (server + local client)
-            NetworkManager.Singleton.StartHost();
+            // 🚫 DO NOT StartHost() here — that creates a local client & player
+            if (!NetworkManager.Singleton.StartServer())
+            {
+                Debug.LogError("[Relay] StartServer() failed");
+                return "";
+            }
+
             return joinCode;
         }
         catch (System.Exception e)

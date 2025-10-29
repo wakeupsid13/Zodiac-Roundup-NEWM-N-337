@@ -215,7 +215,7 @@ MonoBehaviour:
   minMoveDistance: 0.2
   playerMask:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 64
   requireNetworkPlayerRoot: 1
   animalStateText: {fileID: 0}
   assistWindowSeconds: 5

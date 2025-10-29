@@ -11,7 +11,7 @@ public class PlayerMovement : NetworkBehaviour
     public float rotationSpeed = 200f;
     public float movementSpeed = 5f;
     public float runningSpeed = 10f;
-    public float jumpHeight = 2f;
+    public float jumpHeight = 2.5f;
     public float gravity = -9.81f;
 
     private CharacterController controller;

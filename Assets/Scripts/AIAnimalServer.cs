@@ -249,6 +249,8 @@ public class AIAnimalServer : NetworkBehaviour
             return;
         }
 
+        RegisterNearbyPlayersAsContributors(uniqueRoots);
+
         // Sum push vectors (away from players)
         Vector3 sumDir = Vector3.zero;
         foreach (var d in pushDirs) sumDir += d;
@@ -272,8 +274,8 @@ public class AIAnimalServer : NetworkBehaviour
 
         // True herd rule: ≥3 players and ≥3 aligned
         bool enoughPlayers = nearbyPlayers >= 2;
-        bool alignedGroup  = aligned >= 2;
-        bool triggerKick   = enoughPlayers && alignedGroup;
+        bool alignedGroup = aligned >= 2;
+        bool triggerKick = enoughPlayers && alignedGroup;
 
         if (triggerKick)
         {
