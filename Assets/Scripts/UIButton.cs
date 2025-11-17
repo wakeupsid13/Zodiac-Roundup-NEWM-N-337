@@ -13,17 +13,22 @@ public class UIButton : MonoBehaviour
 
     bool _joining;
     [SerializeField] private TMP_InputField nameInput;
+    [SerializeField] private GameObject lobbyPanel;
 
     public void StartHost()
     {
+        if (GameState.Instance) GameState.Instance.ChangeName(nameInput ? nameInput.text.Trim() : "");
         NetworkManager.Singleton.StartHost();
         panel.SetActive(false);
+        lobbyPanel.SetActive(true);
     }
 
     public void StartClient()
     {
+        if (GameState.Instance) GameState.Instance.ChangeName(nameInput ? nameInput.text.Trim() : "");
         NetworkManager.Singleton.StartClient();
         panel.SetActive(false);
+        lobbyPanel.SetActive(true);
     }
 
     public async void StartClientViaRelay()
@@ -42,9 +47,11 @@ public class UIButton : MonoBehaviour
             _joining = true;
             if (joinRelayButton) joinRelayButton.interactable = false;
 
+            if (GameState.Instance) GameState.Instance.ChangeName(nameInput ? nameInput.text.Trim() : "");
             await RelayManager.Instance.JoinRelayAndStartClientAsync(code);
             Debug.Log("[ConnectionUI] Join via Relay requested...");
             panel.SetActive(false);
+            lobbyPanel.SetActive(true);
         }
         catch (System.Exception ex)
         {
@@ -61,6 +68,14 @@ public class UIButton : MonoBehaviour
     {
         if (GameState.Instance != null)
             GameState.Instance.ChangeName(nameInput.text);
+        if (SingleSceneSessionManager.Instance != null)
+        {
+            var mgr = SingleSceneSessionManager.Instance;
+            var cid = NetworkManager.Singleton.LocalClientId;
+            var nm = nameInput ? nameInput.text : "";
+            if (NetworkManager.Singleton.IsServer) mgr.SetLobbyName_Server(cid, nm);
+            else mgr.ReportPlayerNameServerRpc(cid, nm);
+        }
     }
 
 }

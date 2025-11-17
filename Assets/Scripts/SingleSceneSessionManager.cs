@@ -289,9 +289,6 @@ public class SingleSceneSessionManager : NetworkBehaviour
         Phase.Value = RoundPhase.Results;
 
         if (spawner) spawner.enabled = false;
-        foreach (var a in Object.FindObjectsOfType<AIAnimalServer>())
-            if (a.NetworkObject && a.NetworkObject.IsSpawned) a.NetworkObject.Despawn();
-
         ShowResultsClientRpc();
     }
 

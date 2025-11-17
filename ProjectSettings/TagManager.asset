@@ -5,6 +5,7 @@ TagManager:
   serializedVersion: 3
   tags:
   - Animal
+  - ReadyToggle
   layers:
   - Default
   - TransparentFX

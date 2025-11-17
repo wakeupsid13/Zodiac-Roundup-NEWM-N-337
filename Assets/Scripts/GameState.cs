@@ -10,10 +10,32 @@ public class GameState : NetworkBehaviour
     public NetworkVariable<int> TeamScore = new NetworkVariable<int>(
         0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    // server side variable to keep track of time
+    public NetworkVariable<int> RoundTimeSeconds = new NetworkVariable<int>(
+        300, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    float _accum;
+
     void Awake()
     {
         if (Instance == null) { Instance = this; DontDestroyOnLoad(gameObject); }
         else Destroy(gameObject);
+
+        // if (!IsServer) return;
+        // RoundTimeSeconds.Value = 300; // 5 minutes
+    }
+
+    private void Update() {
+        if (!IsServer) return;
+
+        if (RoundTimeSeconds.Value <= 0) return;
+        _accum += Time.deltaTime;
+        if (_accum >= 1f)
+        {
+            RoundTimeSeconds.Value -= 1;
+            _accum = 0f;
+        }
+        Debug.Log($"Time left: {RoundTimeSeconds.Value} seconds");
     }
 
     public void AddScore(int amount)
