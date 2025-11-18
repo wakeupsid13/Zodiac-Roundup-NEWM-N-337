@@ -6,6 +6,7 @@ TagManager:
   tags:
   - Animal
   - ReadyToggle
+  - TutorialRat
   layers:
   - Default
   - TransparentFX

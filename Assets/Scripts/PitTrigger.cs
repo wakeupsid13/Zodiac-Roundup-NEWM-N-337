@@ -10,6 +10,8 @@ public class PitTrigger : NetworkBehaviour
     public int pointsPerAnimal = 5;
     public float respawnDelay = 2f;
 
+    public AudioClip splashSound;
+
     void OnTriggerEnter(Collider other)
     {
         if (!IsServer) return;
@@ -39,10 +41,8 @@ public class PitTrigger : NetworkBehaviour
                     var ps = playerObj.GetComponent<PlayerState>();
                     string n = ps ? ps.DisplayName.Value.ToString() : $"Player{clientId}";
                     names.Add(n);
-                }
+                }   
             }
-
-            Debug.Log($"[Contrib] awarding assists to: {string.Join(",", contributors)} (count={contributors.Count})");
 
             // 4) Send toast to all clients
             string animalName = animal.gameObject.name.Replace("(Clone)", "").Trim();
@@ -58,10 +58,21 @@ public class PitTrigger : NetworkBehaviour
             if (GameState.Instance && GameState.Instance.IsServer)
                 GameState.Instance.AddScore(pointsPerAnimal);
 
+            // Play splash sound
+            PlaySplashSoundClientRpc();
+
             // Optional: respawn a new one shortly
             var spawner = FindObjectOfType<AnimalSpawner>();
             if (spawner && spawner.IsServer)
                 spawner.Invoke(nameof(AnimalSpawner.SpawnOne), respawnDelay);
         }
+    }
+
+    [ClientRpc]
+    void PlaySplashSoundClientRpc()
+    {
+        if (splashSound == null) return;
+        if (Camera.main == null) return;
+        AudioSource.PlayClipAtPoint(splashSound, Camera.main.transform.position);
     }
 }
