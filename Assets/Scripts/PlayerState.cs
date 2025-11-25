@@ -10,6 +10,13 @@ public class PlayerState : NetworkBehaviour
     public NetworkVariable<int> Assists = new NetworkVariable<int>(
         0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    public NetworkVariable<int> PersonalScore = new NetworkVariable<int>(
+        0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    // How many times this player fell into the pit (for debugging / UI if you want it)
+    public NetworkVariable<int> PitPenalties = new NetworkVariable<int>(
+        0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
     public NetworkVariable<FixedString128Bytes> DisplayName = new NetworkVariable<FixedString128Bytes>(
         new FixedString64Bytes("Player"), NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 

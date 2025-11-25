@@ -16,6 +16,8 @@ public class GameState : NetworkBehaviour
 
     float _accum;
 
+
+
     void Awake()
     {
         if (Instance == null) { Instance = this; DontDestroyOnLoad(gameObject); }
@@ -25,7 +27,8 @@ public class GameState : NetworkBehaviour
         // RoundTimeSeconds.Value = 300; // 5 minutes
     }
 
-    private void Update() {
+    private void Update()
+    {
         if (!IsServer) return;
 
         if (RoundTimeSeconds.Value <= 0) return;
@@ -46,5 +49,24 @@ public class GameState : NetworkBehaviour
     public void ChangeName(string newName)
     {
         localPlayerName = newName;
+    }
+
+    public void ResetRoundForNewGame()
+    {
+        if (!IsServer) return;
+
+        // 1) Reset score + timer
+        TeamScore.Value = 0;
+        RoundTimeSeconds.Value = 300; // or whatever your round length is
+
+        // 2) Despawn ALL animals from previous round
+        var animals = UnityEngine.Object.FindObjectsByType<AIAnimalServer>(FindObjectsSortMode.None);
+        foreach (var a in animals)
+        {
+            if (a.NetworkObject && a.NetworkObject.IsSpawned)
+            {
+                a.NetworkObject.Despawn(true); // true = destroy on server + clients
+            }
+        }
     }
 }
