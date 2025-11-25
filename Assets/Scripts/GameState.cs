@@ -35,7 +35,6 @@ public class GameState : NetworkBehaviour
             RoundTimeSeconds.Value -= 1;
             _accum = 0f;
         }
-        Debug.Log($"Time left: {RoundTimeSeconds.Value} seconds");
     }
 
     public void AddScore(int amount)
