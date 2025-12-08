@@ -3,6 +3,7 @@ using Unity.Netcode;
 using Unity.Collections; // for FixedString
 using TMPro;
 using System.Collections;
+using UnityEngine.SceneManagement;
 
 public class PlayerState : NetworkBehaviour
 {
@@ -18,7 +19,9 @@ public class PlayerState : NetworkBehaviour
         0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     public NetworkVariable<FixedString128Bytes> DisplayName = new NetworkVariable<FixedString128Bytes>(
-        new FixedString64Bytes("Player"), NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+        new FixedString128Bytes("Player"),
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server);
 
     private TMP_Text nameText;
 
@@ -33,13 +36,16 @@ public class PlayerState : NetworkBehaviour
             if (rend) nameText.color = rend.material.color;
 
             // initial value (empty by default until server writes)
-            nameText.text = string.IsNullOrWhiteSpace(DisplayName.Value.ToString()) ? $"Player {OwnerClientId}" : DisplayName.Value.ToString();
+            var display = DisplayName.Value.ToString();
+            nameText.text = string.IsNullOrWhiteSpace(display)
+                ? $"Player {OwnerClientId}"
+                : display;
 
             // keep it synced when the server sets PlayerName
             DisplayName.OnValueChanged += OnPlayerNameChanged;
         }
 
-        // === Owner pushes their cached name to the server (host writes directly) ===
+        // === Owner pushes their cached name to the server ===
         if (IsOwner)
         {
             var cached = GameState.Instance ? GameState.Instance.localPlayerName : "";
@@ -51,25 +57,22 @@ public class PlayerState : NetworkBehaviour
                 else
                     SetNameServerRpc(cached);
             }
-            // ADD: push to lobby list once the manager is spawned
-            StartCoroutine(PushNameToLobbyWhenReady());
+
+            // Only bother syncing into lobby list if we're actually in the LobbyScene
+            if (SceneManager.GetActiveScene().name == "LobbyScene")
+            {
+                StartCoroutine(PushNameToLobbyWhenReady());
+            }
         }
     }
 
-    private void Update() {
-        // if (SingleSceneSessionManager.Instance != null)
-        // {
-        //     SingleSceneSessionManager.Instance.ReportPlayerNameServerRpc(OwnerClientId, DisplayName.Value.ToString());
-        // }
-    }
-
-    // ADD:
+    // Pushes name into LobbySessionManager's NetworkList when it's ready
     private IEnumerator PushNameToLobbyWhenReady()
     {
-        // Wait until the SingleSceneSessionManager exists and is network-spawned
-        while (SingleSceneSessionManager.Instance == null ||
-               SingleSceneSessionManager.Instance.NetworkObject == null ||
-               !SingleSceneSessionManager.Instance.NetworkObject.IsSpawned)
+        // Wait until LobbySessionManager exists and is network-spawned
+        while (LobbySessionManager.Instance == null ||
+               LobbySessionManager.Instance.NetworkObject == null ||
+               !LobbySessionManager.Instance.NetworkObject.IsSpawned)
         {
             yield return null;
         }
@@ -77,28 +80,32 @@ public class PlayerState : NetworkBehaviour
         var cached = GameState.Instance ? GameState.Instance.localPlayerName : "";
         if (!string.IsNullOrWhiteSpace(cached))
         {
-            // Tell server to overwrite default "Player{clientId}" in LobbyPlayers
-            var mgr = SingleSceneSessionManager.Instance;
+            var mgr = LobbySessionManager.Instance;
             if (mgr == null) yield break;
 
-            if (IsServer) mgr.SetLobbyName_Server(OwnerClientId, cached);
-            else mgr.ReportPlayerNameServerRpc(OwnerClientId, cached);
+            // Tell server to overwrite default "Player {clientId}" in LobbyPlayers
+            if (IsServer)
+                mgr.AddOrUpdateLobbyPlayer_Server(OwnerClientId, cached);
+            else
+                mgr.ReportPlayerNameServerRpc(OwnerClientId, cached);
         }
     }
 
     private void OnPlayerNameChanged(FixedString128Bytes oldV, FixedString128Bytes newV)
     {
-        if (nameText) nameText.text = newV.ToString();
-        if (SingleSceneSessionManager.Instance != null)
+        if (nameText)
+            nameText.text = newV.ToString();
+
+        // If we're in a scene where LobbySessionManager exists (LobbyScene),
+        // also update the lobby list entry to match
+        var mgr = LobbySessionManager.Instance;
+        if (mgr != null && mgr.IsSpawned)
         {
-            // Update name in lobby list if needed
-            var mgr = SingleSceneSessionManager.Instance;
-            if (mgr != null)
-            {
-                var s = newV.ToString();
-                if (IsServer) mgr.SetLobbyName_Server(OwnerClientId, s);
-                else mgr.ReportPlayerNameServerRpc(OwnerClientId, s);
-            }
+            var s = newV.ToString();
+            if (IsServer)
+                mgr.AddOrUpdateLobbyPlayer_Server(OwnerClientId, s);
+            else
+                mgr.ReportPlayerNameServerRpc(OwnerClientId, s);
         }
     }
 

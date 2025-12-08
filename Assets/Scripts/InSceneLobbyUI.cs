@@ -6,23 +6,28 @@ using Unity.Netcode;
 public class InSceneLobbyUI : MonoBehaviour
 {
     [Header("Assign")]
-    public Transform listRoot;
-    public GameObject rowPrefab;   // two TMP texts: [Name, ReadyStatus]
+    public Transform listRoot;          // parent for the player rows
+    public GameObject rowPrefab;        // prefab with 2 TMP texts: [Name, ReadyStatus]
     public Toggle readyToggle;
-    public GameObject lobbyPanel;
-    public GameObject gamePanel;
+    public GameObject lobbyPanel;       // optional: whole lobby UI panel
 
-    bool _sentInitial;  // NEW: send one-time ready state after row exists
+    bool _sentInitial;                  // one-time sync once our row exists
 
     void OnEnable()
     {
         _sentInitial = false;
-        if (readyToggle) readyToggle.onValueChanged.AddListener(OnReadyChanged);
+
+        if (readyToggle)
+            readyToggle.onValueChanged.AddListener(OnReadyChanged);
+
         InvokeRepeating(nameof(Refresh), 0.1f, 0.25f);
     }
+
     void OnDisable()
     {
-        if (readyToggle) readyToggle.onValueChanged.RemoveListener(OnReadyChanged);
+        if (readyToggle)
+            readyToggle.onValueChanged.RemoveListener(OnReadyChanged);
+
         CancelInvoke(nameof(Refresh));
         _sentInitial = false;
     }
@@ -31,65 +36,71 @@ public class InSceneLobbyUI : MonoBehaviour
     {
         return NetworkManager.Singleton &&
                NetworkManager.Singleton.IsListening &&
-               SingleSceneSessionManager.Instance &&
-               SingleSceneSessionManager.Instance.NetworkObject &&
-               SingleSceneSessionManager.Instance.NetworkObject.IsSpawned;
+               LobbySessionManager.Instance &&
+               LobbySessionManager.Instance.NetworkObject &&
+               LobbySessionManager.Instance.NetworkObject.IsSpawned;
     }
 
     public void OnReadyChanged(bool on)
     {
         if (!IsLive()) return;
 
-        var mgr = SingleSceneSessionManager.Instance;
-        var myId = NetworkManager.Singleton.LocalClientId;
-
-        if (NetworkManager.Singleton.IsServer)
-            mgr.SetReady_Server(myId, on);          // host updates directly
-        else
-            mgr.SetReadyServerRpc(on);              // clients use RPC
+        // Everyone (host + clients) just calls the ServerRpc;
+        // LobbySessionManager figures out who sent it via ServerRpcParams.
+        LobbySessionManager.Instance.SetReadyServerRpc(on);
     }
 
     void Refresh()
     {
         bool live = IsLive();
-        if (readyToggle) readyToggle.interactable = live;
-        if (!live || SingleSceneSessionManager.Instance == null) return;
 
-        // One-time initial sync: only after our row exists on server
+        if (readyToggle)
+            readyToggle.interactable = live;
+
+        if (lobbyPanel)
+            lobbyPanel.SetActive(live);
+
+        if (!live || LobbySessionManager.Instance == null)
+            return;
+
+        var mgr = LobbySessionManager.Instance;
+
+        // One-time initial sync: only after our row exists on the server
         if (!_sentInitial && readyToggle)
         {
             ulong myId = NetworkManager.Singleton.LocalClientId;
             bool haveRow = false;
-            foreach (var p in SingleSceneSessionManager.Instance.LobbyPlayers)
-                if (p.ClientId == myId) { haveRow = true; break; }
+
+            foreach (var p in mgr.LobbyPlayers)
+            {
+                if (p.ClientId == myId)
+                {
+                    haveRow = true;
+                    break;
+                }
+            }
 
             if (haveRow)
             {
-                var mgr = SingleSceneSessionManager.Instance;
-                if (NetworkManager.Singleton.IsServer)
-                    mgr.SetReady_Server(myId, readyToggle.isOn);
-                else
-                    mgr.SetReadyServerRpc(readyToggle.isOn);
-
+                mgr.SetReadyServerRpc(readyToggle.isOn);
                 _sentInitial = true;
             }
         }
 
-        // rebuild list UI
-        foreach (Transform c in listRoot) Destroy(c.gameObject);
-        foreach (var p in SingleSceneSessionManager.Instance.LobbyPlayers)
+        // Rebuild player list UI
+        foreach (Transform c in listRoot)
+            Destroy(c.gameObject);
+
+        foreach (var p in mgr.LobbyPlayers)
         {
             var go = Instantiate(rowPrefab, listRoot);
             var texts = go.GetComponentsInChildren<TextMeshProUGUI>(true);
-            texts[0].text = p.Name.ToString();
-            texts[1].text = p.Ready ? "Ready ✓" : "Not Ready !!!";
-        }
 
-        // NEW: show panel only in Lobby phase (runs on every client)
-        if (lobbyPanel)
-        {
-            lobbyPanel.SetActive(SingleSceneSessionManager.Instance.Phase.Value == RoundPhase.Lobby);
-            gamePanel.SetActive(SingleSceneSessionManager.Instance.Phase.Value == RoundPhase.Playing);
+            if (texts.Length > 0)
+                texts[0].text = p.Name.ToString();
+
+            if (texts.Length > 1)
+                texts[1].text = p.Ready ? "Ready ✓" : "Not Ready !!!";
         }
     }
 }

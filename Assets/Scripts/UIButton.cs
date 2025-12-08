@@ -1,39 +1,73 @@
 using UnityEngine;
-using Unity.Netcode;
-using TMPro;
 using UnityEngine.UI;
+using TMPro;
+using Unity.Netcode;
+using UnityEngine.SceneManagement;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 public class UIButton : MonoBehaviour
 {
-    public GameObject panel;
+    [Header("Main Menu UI")]
+    public GameObject mainPanel;              // whole start menu panel
     public TMP_InputField joinCodeField;
-    public UnityEngine.UI.Button joinRelayButton;
+    public Button joinRelayButton;
+
+    [SerializeField]
+    private TMP_InputField nameInput;
+
+    [Header("Scene Names")]
+    [SerializeField] private string lobbySceneName = "LobbyScene";
+    [SerializeField] private string tutorialSceneName = "TutorialScene";
 
     bool _joining;
-    [SerializeField] private TMP_InputField nameInput;
-    [SerializeField] private GameObject lobbyPanel;
 
-    public void StartHost()
+    void Awake()
     {
-        if (GameState.Instance) GameState.Instance.ChangeName(nameInput ? nameInput.text.Trim() : "");
-        NetworkManager.Singleton.StartHost();
-        panel.SetActive(false);
-        lobbyPanel.SetActive(true);
+        // Make sure NetworkManager / RelayManager / GameState live on a
+        // DontDestroyOnLoad object somewhere in the Start scene.
     }
 
-    public void StartClient()
+    public async void StartHost()
     {
-        if (GameState.Instance) GameState.Instance.ChangeName(nameInput ? nameInput.text.Trim() : "");
+        // set name
+        if (GameState.Instance)
+            GameState.Instance.ChangeName(nameInput ? nameInput.text.Trim() : "");
+
+        // 🔹 show loading before we start hosting / switch scene
+        if (LoadingManager.Instance != null)
+            LoadingManager.Instance.Show("Starting lobby...");
+
+        // start host
+        NetworkManager.Singleton.StartHost();
+
+        // host triggers networked scene load to Lobby
+        if (NetworkManager.Singleton.IsHost)
+        {
+            NetworkManager.Singleton.SceneManager.LoadScene(
+                lobbySceneName,
+                UnityEngine.SceneManagement.LoadSceneMode.Single
+            );
+        }
+
+        HideMainMenu();
+    }
+
+
+    public async void StartClient()
+    {
+        if (GameState.Instance)
+            GameState.Instance.ChangeName(nameInput ? nameInput.text.Trim() : "");
+
         NetworkManager.Singleton.StartClient();
-        panel.SetActive(false);
-        lobbyPanel.SetActive(true);
+
+        HideMainMenu();
     }
 
     public async void StartClientViaRelay()
     {
         if (_joining) return;
+
         var code = (joinCodeField ? joinCodeField.text : "").Trim().ToUpperInvariant();
 
         if (string.IsNullOrEmpty(code) || !Regex.IsMatch(code, "^[A-Z0-9]{6,8}$"))
@@ -47,11 +81,15 @@ public class UIButton : MonoBehaviour
             _joining = true;
             if (joinRelayButton) joinRelayButton.interactable = false;
 
-            if (GameState.Instance) GameState.Instance.ChangeName(nameInput ? nameInput.text.Trim() : "");
+            if (GameState.Instance)
+                GameState.Instance.ChangeName(nameInput ? nameInput.text.Trim() : "");
+
+            // Join via Relay (this starts the client)
             await RelayManager.Instance.JoinRelayAndStartClientAsync(code);
             Debug.Log("[ConnectionUI] Join via Relay requested...");
-            panel.SetActive(false);
-            lobbyPanel.SetActive(true);
+
+            // Host is already in LobbyScene; NGO will sync us into it.
+            HideMainMenu();
         }
         catch (System.Exception ex)
         {
@@ -64,18 +102,29 @@ public class UIButton : MonoBehaviour
         }
     }
 
-    public void ChangeName()
+    void HideMainMenu()
     {
-        if (GameState.Instance != null)
-            GameState.Instance.ChangeName(nameInput.text);
-        if (SingleSceneSessionManager.Instance != null)
-        {
-            var mgr = SingleSceneSessionManager.Instance;
-            var cid = NetworkManager.Singleton.LocalClientId;
-            var nm = nameInput ? nameInput.text : "";
-            if (NetworkManager.Singleton.IsServer) mgr.SetLobbyName_Server(cid, nm);
-            else mgr.ReportPlayerNameServerRpc(cid, nm);
-        }
+        if (mainPanel) mainPanel.SetActive(false);
     }
 
+    // Called when the name input field changes (optional)
+    public void ChangeName()
+    {
+        if (!nameInput) return;
+
+        string nm = nameInput.text?.Trim() ?? "";
+
+        if (GameState.Instance != null)
+            GameState.Instance.ChangeName(nm);
+
+        // Name will be picked up by PlayerState / LobbySessionManager
+        // after connecting; no need to talk to any session manager here now.
+    }
+
+    // Tutorial button
+    public void OpenTutorial()
+    {
+        // No networking here – just go offline to tutorial scene
+        SceneManager.LoadScene(tutorialSceneName, LoadSceneMode.Single);
+    }
 }
