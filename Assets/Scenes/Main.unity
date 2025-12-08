@@ -19618,8 +19618,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 63317caa1211f9c4780c1c03fd00031e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ShowTopMostFoldoutHeaderGroup: 1
-  minimapCamera: {fileID: 0}
 --- !u!4 &335913447
 Transform:
   m_ObjectHideFlags: 0
@@ -88978,7 +88976,7 @@ MonoBehaviour:
   gameAreaRoot: {fileID: 2092757286}
   lobbyAreaRoot: {fileID: 408090740}
   winPoints: 100
-  roundSeconds: 60
+  roundSeconds: 300
   Phase:
     m_InternalValue: 0
   SecondsRemaining:
